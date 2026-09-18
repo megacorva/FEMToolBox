@@ -63,25 +63,23 @@ function [uh,H1Error,H0Error]=solveEllipticPDE(mesh,dif,convection,reaction,f)
 
         opCoercity=eigDifMin + min(0,reaction*CP^2);
         if opCoercity>0
-            opBound=eigDifMax + norm(convection)*CP + max(0,reaction*CP^2);
+            opBound=eigDifMax + norm(convection)*CP + abs(reaction*CP^2);
 
             % L^2 norm of f_h
             f0=sqrt(fNodalValues'*F);
-            
-            % upper bound of H^1 seminorm of u
-            u1=f0*CP/opCoercity;
-
-            % estimate |u|_2 by Miranda-Talenti
-            u2=(  f0 + ( norm(convection) + abs(reaction)*CP )*u1  )/eigDifMin;
 
             % interpolation error constants
-            e21=mesh.getE21Cons();
+            I1=mesh.getE21Cons();
+
+            % regularity constant
+            regularity=( 1 + ( norm(convection) + abs(reaction)*CP ) ...
+                *CP/opCoercity )/eigDifMin;
 
             % estimate |u-uh|_1 by Cea's lemma
-            H1Error=(opBound/opCoercity) * e21* u2;
+            H1Error=( opBound * regularity * I1 * f0 )/opCoercity;
 
             % estimate ||u-uh||_0 using duality argument
-            H0Error=opBound*e21*H1Error/eigDifMin;
+            H0Error= opBound * regularity *I1 * H1Error ;
         end
     end
 end
