@@ -1,4 +1,4 @@
-function uh=solveObstacleProblem(initialValue,dif,convection,reaction, ...
+function uh=solveObstacleProblem(initialGuess,dif,convection,reaction, ...
     force,obstacle,tolerance)
     % finds u in K s.t. (Lu,v-u)>=(f_h,v-u),
     %  for all v in K={v in H_0^1:v>=obstacle}
@@ -13,7 +13,7 @@ function uh=solveObstacleProblem(initialValue,dif,convection,reaction, ...
     % where uh* is the exact solution of the FE variational inequality.
     %----------------------------------------------------------------------
     % inputs:
-    %   initialValue: FEFunc
+    %   initialGuess: FEFunc
     %   dif: 2*2 SPD matrix, or positive real number
     %   convection: 2*1 vector
     %   reaction: non-negative real number
@@ -31,7 +31,7 @@ function uh=solveObstacleProblem(initialValue,dif,convection,reaction, ...
     %   but we give a control on l^2 iterative error 
     %   in the coordinate space
     %----------------------------------------------------------------------
-    mesh=initialValue.mesh;
+    mesh=initialGuess.mesh;
     addpath(fullfile(fileparts(mfilename('fullpath')), '\..'));
     internalNodes=mesh.internalNodes;
     % 1. get FE matrices---------------------------------------------------
@@ -60,7 +60,7 @@ function uh=solveObstacleProblem(initialValue,dif,convection,reaction, ...
     eps=tolerance*(1-contraction)/contraction;
 
     % initial value
-    u1=initialValue.nodalValues(internalNodes);
+    u1=initialGuess.nodalValues(internalNodes);
     u2=u1+step*(FI-LI*u1);
     u2=clip(u2,ob,Inf);
 
