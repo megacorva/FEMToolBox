@@ -1,6 +1,6 @@
 function [uh,H1Error,H0Error]=solveEllipticPDE(mesh,dif,convection,reaction,f)
-    % solves Lu=f_h with FEM, 
-    % where f_h is the Lagrange interpolation of f,
+    % solves Lu=f with FEM, 
+    % where f is a FE function,
     % Lu=-div( dif*grad u) + convection*grad u + reaction* u,
     % u=0 on the boundary of the mesh
     %----------------------------------------------------------------------
@@ -9,7 +9,7 @@ function [uh,H1Error,H0Error]=solveEllipticPDE(mesh,dif,convection,reaction,f)
     %   dif: 2*2 SPD matrix, or positive real number
     %   convection: 2*1 vector
     %   reaction: non-negative real number
-    %   f=@(x,y)...
+    %   f: FEFunc
     %----------------------------------------------------------------------
     %outputs:
     %   uh: FEFunc
@@ -28,10 +28,8 @@ function [uh,H1Error,H0Error]=solveEllipticPDE(mesh,dif,convection,reaction,f)
     LI=L(internalNodes,internalNodes);
     
     % 2. get the load vector-----------------------------------------------
-    xNodes=mesh.nodes(1,:);
-    yNodes=mesh.nodes(2,:);
+    fNodalValues=f.nodalValues;
     [~,~,M]=mesh.getEllipticMatrices();
-    fNodalValues=arrayfun(f, xNodes, yNodes)';
     F=M * fNodalValues;
     FI=F(internalNodes);
 

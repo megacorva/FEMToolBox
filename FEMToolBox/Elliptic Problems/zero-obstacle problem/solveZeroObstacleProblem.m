@@ -1,15 +1,14 @@
 function uh=solveZeroObstacleProblem(initialGuess,dif,convection,reaction, ...
-    force,H1tolerance)
+    force,H1tolerance, useGPU)
     % finds u in K s.t. (Lu,v-u)>=(f_h,v-u),
     %  for all v in K={v in H_0^1:v>=0}
     %  with the FEM scheme
     % finding u_h in K_h, s.t. (Lu_h, v_h-u_h)>=(f_h,v_h-u_h),
     % for all v_h in K_h={v in P1 FESpace:v>=0},
     % where 
-    % f_h is the Lagrange interpolation of force,
     % Lu=-div( dif*grad u) + convection*grad u + reaction* u,
     % iterative error bound:
-    % |uh-uh*|<=tolerance,
+    % |uh-uh*|_1<=tolerance,
     % where uh* is the exact solution of the FE variational inequality.
     %----------------------------------------------------------------------
     % inputs:
@@ -17,11 +16,12 @@ function uh=solveZeroObstacleProblem(initialGuess,dif,convection,reaction, ...
     %   dif: 2*2 SPD matrix, or positive real number
     %   convection: 2*1 vector
     %   reaction: non-negative real number
-    %   force=@(x,y)...
+    %   force: FEFunc
     %   H1tolerance: positive real number
+    %   useGPU: boolean
     %----------------------------------------------------------------------
     % outputs:
-    %   ub: FEFunc
+    %   uh: FEFunc
     %----------------------------------------------------------------------
 
 
@@ -40,10 +40,8 @@ function uh=solveZeroObstacleProblem(initialGuess,dif,convection,reaction, ...
     LI=L(internalNodes,internalNodes);
     
     % 2. get the load vector-----------------------------------------------
-    xNodes=mesh.nodes(1,:);
-    yNodes=mesh.nodes(2,:);
     [~,~,M]=mesh.getEllipticMatrices();
-    fNodalValues=arrayfun(force, xNodes, yNodes)';
+    fNodalValues=force.nodalValues;
     F=M * fNodalValues;
     FI=F(internalNodes);
 
@@ -63,7 +61,7 @@ function uh=solveZeroObstacleProblem(initialGuess,dif,convection,reaction, ...
     
     if ~isequal(u1,u2)
         % GPU parallelization
-        if canUseGPU
+        if useGPU && canUseGPU
             LI=gpuArray(LI);
             FI=gpuArray(FI);
             u1=gpuArray(u1);
@@ -86,7 +84,7 @@ function uh=solveZeroObstacleProblem(initialGuess,dif,convection,reaction, ...
             while norm(u1-u2)>=eps
                 u1=u2;
                 u2=u2+step*(FI-LI*u2);
-                u2=clip(u2,ob,Inf);
+                u2=clip(u2,0,Inf);
                 itNum=itNum+1;
             end
             fprintf('%d CPU iterations till convergence.\n', ...

@@ -7,7 +7,6 @@ function H1Err=getZeroObstacleTruncErr(mesh,dif,convection,reaction, ...
     % finding u_h in K_h, s.t. (Lu_h, v_h-u_h)>=(f_h,v_h-u_h),
     % for all v_h in K_h={v in P1 FESpace:v>=0},
     % where 
-    % f_h is the Lagrange interpolation of force,
     % Lu=-div( dif*grad u) + convection*grad u + reaction* u,
     % iterative error bound:
     % |uh-uh*|<=tolerance,
@@ -18,7 +17,7 @@ function H1Err=getZeroObstacleTruncErr(mesh,dif,convection,reaction, ...
     %   dif: 2*2 SPD matrix, or positive real number
     %   convection: 2*1 vector
     %   reaction: non-negative real number
-    %   force=@(x,y)...
+    %   force: FEFunc
     %----------------------------------------------------------------------
     % outputs:
     %   H1Err: positive real number
@@ -53,10 +52,8 @@ function H1Err=getZeroObstacleTruncErr(mesh,dif,convection,reaction, ...
         I1=mesh.getE21Cons();
         
         % 5. getting L2 norm of f_h----------------------------------------
-        xNodes=mesh.nodes(1,:);
-        yNodes=mesh.nodes(2,:);
         [~,~,M]=mesh.getEllipticMatrices();
-        fNodalValues=arrayfun(force, xNodes, yNodes)';
+        fNodalValues=force.nodalValues;
         F0=sqrt(fNodalValues'*M*fNodalValues);
 
         H1Err=F0*( I0*2*regularity/opCoercity + ...

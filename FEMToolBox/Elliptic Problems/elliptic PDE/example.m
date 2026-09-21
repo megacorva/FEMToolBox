@@ -14,10 +14,12 @@ mesh=P1Mesh(nodes,triangles);
 dif=[1,0;0,0.5];
 convection=[2;1];
 reaction=0;
-f=@(x,y)1;
+fExact=@(x,y)1;
 
 % solve PDE and visualize the result and truncation error------------------
-[uh,H1Error,H0Error]=solveEllipticPDE(mesh,dif,convection,reaction,f);
+fInterpolated=FEInterpolate(mesh,fExact);
+[uh,H1Error,H0Error]=solveEllipticPDE(mesh,dif,convection,reaction, ...
+    fInterpolated);
 
 titleFig= "H1 error bound: "+H1Error +", L2 error bound:"+H0Error;
 

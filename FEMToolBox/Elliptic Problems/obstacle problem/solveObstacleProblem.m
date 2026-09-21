@@ -1,12 +1,11 @@
 function uh=solveObstacleProblem(initialGuess,dif,convection,reaction, ...
-    force,obstacle,tolerance)
-    % finds u in K s.t. (Lu,v-u)>=(f_h,v-u),
+    force,obstacle,tolerance, useGPU)
+    % finds u in K s.t. (Lu,v-u)>=(f,v-u),
     %  for all v in K={v in H_0^1:v>=obstacle}
     %  with the FEM scheme
-    % finding u_h in K_h, s.t. (Lu_h, v_h-u_h)>=(f_h,v_h-u_h),
-    % for all v_h in K_h={v in P1 FESpace:v>=b_h},
-    % where b_h is the Lagrange interpolation of obstacle,
-    % f_h is the Lagrange interpolation of force,
+    % finding u_h in K_h, s.t. (Lu_h, v_h-u_h)>=(f,v_h-u_h),
+    % for all v_h in K_h={v in P1 FESpace:v>=b},
+    % where 
     % Lu=-div( dif*grad u) + convection*grad u + reaction* u,
     % iterative error bound:
     % |uh-uh*|<=tolerance,
@@ -17,17 +16,19 @@ function uh=solveObstacleProblem(initialGuess,dif,convection,reaction, ...
     %   dif: 2*2 SPD matrix, or positive real number
     %   convection: 2*1 vector
     %   reaction: non-negative real number
-    %   force=@(x,y)...
-    %   obstacle=@(x,y)...
+    %   force: FEFunc
+    %   obstacle:FEFunc
     %   tolerance: positive real number
+    %   useGPU: boolean
     %----------------------------------------------------------------------
     % outputs:
-    %   ub: FEFunc
+    %   uh: FEFunc
     %----------------------------------------------------------------------
     % remark:
-    %   the truncation error can be derived from Falk's lemma, 
-    %   since |obstacle|_2 is not generally numerically computable,
-    %   we do not return the truncation error,
+    %   the truncation error can be derived from Falk's lemma
+    %   and regularity theories of variational inequalities,
+    %   which involve a lot of variables that is not
+    %   numerically computable,
     %   but we give a control on l^2 iterative error 
     %   in the coordinate space
     %----------------------------------------------------------------------
@@ -45,16 +46,14 @@ function uh=solveObstacleProblem(initialGuess,dif,convection,reaction, ...
     LI=L(internalNodes,internalNodes);
     
     % 2. get the load vector-----------------------------------------------
-    xNodes=mesh.nodes(1,:);
-    yNodes=mesh.nodes(2,:);
+    fNodalValues=force.nodalValues;
     [~,~,M]=mesh.getEllipticMatrices();
-    fNodalValues=arrayfun(force, xNodes, yNodes)';
     F=M * fNodalValues;
     FI=F(internalNodes);
 
     % 3. interpolate the obstacle------------------------------------------
-    obstacleFull = arrayfun(obstacle, xNodes, yNodes)';
-    ob=obstacleFull(internalNodes);
+    obstacleNodal = obstacle.nodalValues;
+    ob=obstacleNodal(internalNodes);
 
     % 4. iterative solution
     eigMin=eigs( SI ,1,'smallestreal');
@@ -71,7 +70,7 @@ function uh=solveObstacleProblem(initialGuess,dif,convection,reaction, ...
     
     if ~isequal(u1,u2)
         % GPU parallelization
-        if canUseGPU
+        if useGPU && canUseGPU
             LI=gpuArray(LI);
             FI=gpuArray(FI);
             u1=gpuArray(u1);

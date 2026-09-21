@@ -13,7 +13,9 @@ mesh=P1Mesh(nodes,triangles);
 dif=1;
 convection=[0;0];
 reaction=0;
-force=@(x,y) -0.4+0.5*(1-x.^2).*(1-y.^2);
+forceExact=@(x,y) -0.4+0.5*(1-x.^2).*(1-y.^2);
+force=FEInterpolate(mesh,forceExact);
+useGPU=true;
 
 truncError=getZeroObstacleTruncErr(mesh,dif,convection,reaction,force);
 consistency=truncError*2;
@@ -26,6 +28,6 @@ initialGuess=solveEllipticPDE(mesh,dif,convection,reaction,force);
 % solve and visualize the result and truncation error----------------------
 
 uh=solveZeroObstacleProblem(initialGuess,dif,convection, ...
-    reaction,force,truncError);
+    reaction,force,truncError,useGPU);
 
 uh.visualize();

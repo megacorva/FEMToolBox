@@ -13,8 +13,13 @@ mesh=P1Mesh(nodes,triangles);
 dif=1;
 convection=[0;0];
 reaction=0;
-force=@(x,y)-10;
-obstacle=@(x,y) -0.5+0.5*(1-x.^2).*(1-y.^2);
+forceExact=@(x,y)-10;
+obstacleExact=@(x,y) -0.5+0.5*(1-x.^2).*(1-y.^2);
+
+force=FEInterpolate(mesh,forceExact);
+obstacle=FEInterpolate(mesh,obstacleExact);
+
+useGPU=false;
 
 % setting the initial value------------------------------------------------
 u0=zeros( size(mesh.nodes,2),1 );
@@ -24,7 +29,7 @@ initialGuess=FEFunc(mesh,u0);
 
 % solve on the initial coarse mesh
 uh=solveObstacleProblem(initialGuess,dif,convection, ...
-    reaction,force,obstacle,10^-6);
+    reaction,force,obstacle,10^-6,useGPU);
 
 % % refine 1 time and solve on the refined mesh
 % uh=uh.uniformRefine();
