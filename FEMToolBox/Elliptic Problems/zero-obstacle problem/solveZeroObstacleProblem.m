@@ -1,11 +1,11 @@
-function uh=solveObstacleProblem(initialGuess,dif,convection,reaction, ...
-    force,obstacle,tolerance)
+function uh=solveZeroObstacleProblem(initialGuess,dif,convection,reaction, ...
+    force,H1tolerance)
     % finds u in K s.t. (Lu,v-u)>=(f_h,v-u),
-    %  for all v in K={v in H_0^1:v>=obstacle}
+    %  for all v in K={v in H_0^1:v>=0}
     %  with the FEM scheme
     % finding u_h in K_h, s.t. (Lu_h, v_h-u_h)>=(f_h,v_h-u_h),
-    % for all v_h in K_h={v in P1 FESpace:v>=b_h},
-    % where b_h is the Lagrange interpolation of obstacle,
+    % for all v_h in K_h={v in P1 FESpace:v>=0},
+    % where 
     % f_h is the Lagrange interpolation of force,
     % Lu=-div( dif*grad u) + convection*grad u + reaction* u,
     % iterative error bound:
@@ -18,19 +18,12 @@ function uh=solveObstacleProblem(initialGuess,dif,convection,reaction, ...
     %   convection: 2*1 vector
     %   reaction: non-negative real number
     %   force=@(x,y)...
-    %   obstacle=@(x,y)...
-    %   tolerance: positive real number
+    %   H1tolerance: positive real number
     %----------------------------------------------------------------------
     % outputs:
     %   ub: FEFunc
     %----------------------------------------------------------------------
-    % remark:
-    %   the truncation error can be derived from Falk's lemma, 
-    %   since |obstacle|_2 is not generally numerically computable,
-    %   we do not return the truncation error,
-    %   but we give a control on l^2 iterative error 
-    %   in the coordinate space
-    %----------------------------------------------------------------------
+
 
     projectRoot = fullfile(fileparts(mfilename('fullpath')), '..', '..');
     addpath(genpath(projectRoot));
@@ -38,9 +31,11 @@ function uh=solveObstacleProblem(initialGuess,dif,convection,reaction, ...
     mesh=initialGuess.mesh;
     internalNodes=mesh.internalNodes;
     % 1. get FE matrices---------------------------------------------------
+    [H,~,~]=mesh.getEllipticMatrices(1,[0;0],0);
     [K,C,R]=mesh.getEllipticMatrices(dif,convection,reaction);
     S=K+R;
     L=S+C;
+    HI=H(internalNodes,internalNodes);
     SI=S(internalNodes,internalNodes);
     LI=L(internalNodes,internalNodes);
     
@@ -52,22 +47,19 @@ function uh=solveObstacleProblem(initialGuess,dif,convection,reaction, ...
     F=M * fNodalValues;
     FI=F(internalNodes);
 
-    % 3. interpolate the obstacle------------------------------------------
-    obstacleFull = arrayfun(obstacle, xNodes, yNodes)';
-    ob=obstacleFull(internalNodes);
-
-    % 4. iterative solution
+    % 3. iterative solution
+    eigHMax=eigs ( HI, 1, 'largestreal' );
     eigMin=eigs( SI ,1,'smallestreal');
     svMax=svds(LI,1,'largest');
     step=eigMin/svMax^2;
     contraction=sqrt(1-eigMin^2/svMax^2);
     % disp(contraction);
-    eps=tolerance*(1-contraction)/contraction;
+    eps=H1tolerance*(1-contraction)/( contraction * eigHMax );
 
     % initial value
     u1=initialGuess.nodalValues(internalNodes);
     u2=u1+step*(FI-LI*u1);
-    u2=clip(u2,ob,Inf);
+    u2=clip(u2,0,Inf);
 
     % parallelization
     if canUseGPU
@@ -80,7 +72,7 @@ function uh=solveObstacleProblem(initialGuess,dif,convection,reaction, ...
     while norm(u1-u2)>=eps
         u1=u2;
         u2=u2+step*(FI-LI*u2);
-        u2=clip(u2,ob,Inf);
+        u2=clip(u2,0,Inf);
     end
     
     u=zeros( size(mesh.nodes,2),1 );

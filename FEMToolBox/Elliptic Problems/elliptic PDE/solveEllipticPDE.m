@@ -18,7 +18,9 @@ function [uh,H1Error,H0Error]=solveEllipticPDE(mesh,dif,convection,reaction,f)
     %   where Lu=f_h, f_h is the Lagrange interpolation of f onto the mesh
     %----------------------------------------------------------------------
     
-    addpath(fullfile(fileparts(mfilename('fullpath')), '\..'));
+    projectRoot = fullfile(fileparts(mfilename('fullpath')), '..', '..');
+    addpath(genpath(projectRoot));
+    
     internalNodes=mesh.internalNodes;
     % 1. get FE matrices---------------------------------------------------
     [K,C,R]=mesh.getEllipticMatrices(dif,convection,reaction);

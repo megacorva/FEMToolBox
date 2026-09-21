@@ -1,6 +1,7 @@
 % solves an obstacle problem, and visualize the result
 
-addpath(fullfile(fileparts(mfilename('fullpath')), '\..'));
+projectRoot = fullfile(fileparts(mfilename('fullpath')), '..', '..');
+addpath(genpath(projectRoot));
 
 % generating a Delauney mesh on the unit square----------------------------
 partition=20;
@@ -16,12 +17,12 @@ force=@(x,y)-10;
 obstacle=@(x,y) -0.5+0.5*(1-x.^2).*(1-y.^2);
 
 % setting the initial value------------------------------------------------
-initialValue=solveEllipticPDE(mesh,dif,convection,reaction,force);
+initialGuess=solveEllipticPDE(mesh,dif,convection,reaction,force);
 
 % solve PDE and visualize the result and truncation error------------------
 
 % solve on the initial coarse mesh
-uh=solveObstacleProblem(initialValue,dif,convection, ...
+uh=solveObstacleProblem(initialGuess,dif,convection, ...
     reaction,force,obstacle,10^-6);
 
 % refine 1 time and solve on the refined mesh

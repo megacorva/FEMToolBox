@@ -1,7 +1,8 @@
 % solves an elliptic PDE, visualize the result together with explicit
 % truncation error bounds
 
-addpath(fullfile(fileparts(mfilename('fullpath')), '\..'));
+projectRoot = fullfile(fileparts(mfilename('fullpath')), '..', '..');
+addpath(genpath(projectRoot));
 
 % generating a Delauney mesh on the unit square----------------------------
 partition=100;
