@@ -17,7 +17,8 @@ force=@(x,y)-10;
 obstacle=@(x,y) -0.5+0.5*(1-x.^2).*(1-y.^2);
 
 % setting the initial value------------------------------------------------
-initialGuess=solveEllipticPDE(mesh,dif,convection,reaction,force);
+u0=zeros( size(mesh.nodes,2),1 );
+initialGuess=FEFunc(mesh,u0);
 
 % solve PDE and visualize the result and truncation error------------------
 
@@ -25,10 +26,10 @@ initialGuess=solveEllipticPDE(mesh,dif,convection,reaction,force);
 uh=solveObstacleProblem(initialGuess,dif,convection, ...
     reaction,force,obstacle,10^-6);
 
-% refine 1 time and solve on the refined mesh
-uh=uh.uniformRefine();
-
-uh=solveObstacleProblem(uh,dif,convection, ...
-    reaction,force,obstacle,10^-8);
+% % refine 1 time and solve on the refined mesh
+% uh=uh.uniformRefine();
+% 
+% uh=solveObstacleProblem(uh,dif,convection, ...
+%     reaction,force,obstacle,10^-8);
 
 uh.visualize();

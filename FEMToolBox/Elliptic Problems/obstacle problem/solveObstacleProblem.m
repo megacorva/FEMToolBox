@@ -68,27 +68,41 @@ function uh=solveObstacleProblem(initialGuess,dif,convection,reaction, ...
     u1=initialGuess.nodalValues(internalNodes);
     u2=u1+step*(FI-LI*u1);
     u2=clip(u2,ob,Inf);
-
-    % parallelization
-    if canUseGPU
-        LI=gpuArray(LI);
-        FI=gpuArray(FI);
-        u1=gpuArray(LI);
-        u2=gpuArray(LI);
-    end
-
-    while norm(u1-u2)>=eps
-        u1=u2;
-        u2=u2+step*(FI-LI*u2);
-        u2=clip(u2,ob,Inf);
+    
+    if ~isequal(u1,u2)
+        % GPU parallelization
+        if canUseGPU
+            LI=gpuArray(LI);
+            FI=gpuArray(FI);
+            u1=gpuArray(u1);
+            u2=gpuArray(u2);
+            
+            itNum=0;
+            while norm(u1-u2)>eps
+                for i=1:50
+                    u1=u2;
+                    u2=u2+step*(FI-LI*u2);
+                    u2=clip(u2,ob,Inf);
+                end
+                itNum=itNum+50;
+            end
+            fprintf('%d GPU iterations till convergence.\n' ...
+            ,itNum);
+            u2=gather(u2);
+        else
+            itNum=0;
+            while norm(u1-u2)>=eps
+                u1=u2;
+                u2=u2+step*(FI-LI*u2);
+                u2=clip(u2,ob,Inf);
+                itNum=itNum+1;
+            end
+            fprintf('%d CPU iterations till convergence.\n', ...
+            itNum);
+        end
     end
     
     u=zeros( size(mesh.nodes,2),1 );
-
-    if canUseGPU
-        u2=gather(u2);
-    end
-
     u(internalNodes)=u2;
     uh=FEFunc(mesh,u);
 end

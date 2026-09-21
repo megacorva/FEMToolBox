@@ -18,7 +18,7 @@ force=@(x,y) -0.4+0.5*(1-x.^2).*(1-y.^2);
 truncError=getZeroObstacleTruncErr(mesh,dif,convection,reaction,force);
 consistency=truncError*2;
 fprintf(['the consistency error from the problem with interpolated ' ...
-    'force is at most %.3e'],consistency);
+    'force is at most %.3e\n'],consistency);
 
 % setting the initial value------------------------------------------------
 initialGuess=solveEllipticPDE(mesh,dif,convection,reaction,force);
