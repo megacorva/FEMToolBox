@@ -135,13 +135,21 @@ class MeshModel:
         return len(self.points) - 1
 
     def refine_triangle(self, index: int) -> None:
-        """Replace one triangle by its four midpoint children."""
+        """Refine one triangle and remove its edge-sharing neighbors."""
         a, b, c = self.triangles[index]
         ab = self._midpoint_node(a, b)
         bc = self._midpoint_node(b, c)
         ca = self._midpoint_node(c, a)
         children = ((a, ab, ca), (ab, b, bc), (ca, bc, c), (ab, bc, ca))
-        self.triangles[index:index + 1] = [self._oriented_triangle(*tri) for tri in children]
+        children = [self._oriented_triangle(*tri) for tri in children]
+        vertices = {a, b, c}
+        refined = []
+        for i, triangle in enumerate(self.triangles):
+            if i == index:
+                refined.extend(children)
+            elif len(vertices.intersection(triangle)) < 2:
+                refined.append(triangle)
+        self.triangles = refined
 
     def refine_all(self) -> None:
         """Refine every current triangle, reusing midpoints on shared edges."""
@@ -180,6 +188,7 @@ class MeshModel:
 
 class P1MeshEditor:
     NODE_RADIUS = 6
+    DOUBLE_CLICK_INTERVAL_MS = 300
 
     def __init__(self, model: MeshModel, title: str) -> None:
         import tkinter as tk
@@ -199,6 +208,7 @@ class P1MeshEditor:
         self.selected_triangle: Optional[int] = None
         self.drag_node: Optional[int] = None
         self.drag_recorded = False
+        self._last_left_press = None
         self.undo_stack: list[tuple[list[tuple[float, float]], list[tuple[int, int, int]]]] = []
         self.pan_anchor: Optional[tuple[float, float]] = None
         self.offset_x, self.offset_y, self.scale = 500.0, 350.0, 70.0
@@ -207,25 +217,33 @@ class P1MeshEditor:
 
         bar = ttk.Frame(self.root, padding=6)
         bar.pack(side="top", fill="x")
-        ttk.Button(bar, text="Open...", command=self.open_file).pack(side="left", padx=2)
-        ttk.Button(bar, text="Save", command=self.save_file).pack(side="left", padx=2)
-        ttk.Button(bar, text="Save As...", command=self.save_file_as).pack(side="left", padx=(2, 12))
+        # Keep each row short enough for the minimum window width.
+        file_bar = ttk.Frame(bar)
+        file_bar.pack(fill="x", pady=(0, 4))
+        edit_bar = ttk.Frame(bar)
+        edit_bar.pack(fill="x", pady=(0, 4))
+        mesh_bar = ttk.Frame(bar)
+        mesh_bar.pack(fill="x")
+
+        ttk.Button(file_bar, text="Open...", command=self.open_file).pack(side="left", padx=2)
+        ttk.Button(file_bar, text="Save", command=self.save_file).pack(side="left", padx=2)
+        ttk.Button(file_bar, text="Save As...", command=self.save_file_as).pack(side="left", padx=2)
+        ttk.Button(file_bar, text="Cancel", command=self.cancel).pack(side="right", padx=2)
+        ttk.Button(file_bar, text="Output...", command=self.confirm_done).pack(side="right", padx=2)
         self.mode_buttons = {}
         for label, mode, key in (("Add Nodes", "node", "N"), ("Add Triangles", "triangle", "T"),
                                  ("Select", "select", "S")):
             button = tk.Button(
-                bar, text=f"{label} ({key})", padx=10, pady=3,
+                edit_bar, text=f"{label} ({key})", padx=10, pady=3,
                 command=lambda m=mode: self.set_mode(m)
             )
             button.pack(side="left", padx=2)
             self.mode_buttons[mode] = button
-        ttk.Button(bar, text="Delete", command=self.delete_selected).pack(side="left", padx=(12, 2))
-        ttk.Button(bar, text="Refine Globally", command=self.refine_globally).pack(side="left", padx=2)
-        ttk.Button(bar, text="Fit (F)", command=self.fit_view).pack(side="left", padx=2)
-        ttk.Label(bar, text="  Snap spacing:").pack(side="left")
-        ttk.Entry(bar, width=7, textvariable=self.snap).pack(side="left")
-        ttk.Button(bar, text="Cancel", command=self.cancel).pack(side="right", padx=2)
-        ttk.Button(bar, text="Output...", command=self.confirm_done).pack(side="right", padx=2)
+        ttk.Button(edit_bar, text="Delete", command=self.delete_selected).pack(side="left", padx=(12, 2))
+        ttk.Button(mesh_bar, text="Refine Globally", command=self.refine_globally).pack(side="left", padx=2)
+        ttk.Button(mesh_bar, text="Fit (F)", command=self.fit_view).pack(side="left", padx=2)
+        ttk.Label(mesh_bar, text="Snap spacing:").pack(side="left", padx=(12, 4))
+        ttk.Entry(mesh_bar, width=7, textvariable=self.snap).pack(side="left", padx=2)
 
         self.canvas = tk.Canvas(self.root, background="#fbfbfc", highlightthickness=0)
         self.canvas.pack(fill="both", expand=True)
@@ -233,8 +251,7 @@ class P1MeshEditor:
 
         self.canvas.bind("<Configure>", lambda _event: self.redraw())
         self.canvas.bind("<Motion>", self.on_motion)
-        self.canvas.bind("<ButtonPress-1>", self.on_left_press)
-        self.canvas.bind("<Double-Button-1>", self.on_double_left)
+        self.canvas.bind("<ButtonPress-1>", self.on_left_click)
         self.canvas.bind("<B1-Motion>", self.on_left_drag)
         self.canvas.bind("<ButtonRelease-1>", self.on_left_release)
         self.canvas.bind("<ButtonPress-3>", self.on_right_click)
@@ -309,6 +326,20 @@ class P1MeshEditor:
                 return i
         return None
 
+    def on_left_click(self, event) -> None:
+        """Detect double clicks with an explicit 300 ms interval."""
+        previous = self._last_left_press
+        self._last_left_press = (event.time, event.x, event.y, self.mode)
+        if previous is not None:
+            timestamp, x, y, mode = previous
+            if (mode == self.mode
+                    and 0 <= event.time - timestamp <= self.DOUBLE_CLICK_INTERVAL_MS
+                    and abs(event.x - x) <= 5 and abs(event.y - y) <= 5):
+                self._last_left_press = None
+                self.on_double_left(event)
+                return
+        self.on_left_press(event)
+
     def on_left_press(self, event) -> None:
         node = self.nearest_node(event.x, event.y)
         if self.mode == "node":
@@ -338,6 +369,7 @@ class P1MeshEditor:
         self.redraw()
 
     def on_left_drag(self, event) -> None:
+        self._last_left_press = None
         if self.mode == "node" and self.drag_node is not None:
             if not self.drag_recorded:
                 self.record_undo()
@@ -495,7 +527,7 @@ class P1MeshEditor:
         self.model.refine_triangle(triangle)
         self.selected_nodes.clear()
         self.selected_triangle = None
-        self.status.set("Triangle refined into four congruent triangles.")
+        self.status.set("Triangle refined into four congruent triangles; edge-sharing neighbors removed.")
         self.redraw()
 
     def refine_globally(self) -> None:
@@ -666,7 +698,7 @@ class P1MeshEditor:
         return self.accepted
 
 
-def createP1Mesh(nodes=None, triangles=None, title="P1 mesh editor"):
+def editP1Mesh(nodes=None, triangles=None, title="P1 mesh editor"):
     """Open the visual editor and return ``(nodes, triangles)``.
 
     Optional initial data must already use the P1Mesh layout (2-by-N nodes,
@@ -679,12 +711,12 @@ def createP1Mesh(nodes=None, triangles=None, title="P1 mesh editor"):
     model = MeshModel.from_arrays(initial_nodes, initial_triangles)
     editor = P1MeshEditor(model, str(title))
     if editor.run():
-        return model.arrays()
+        return editor.model.arrays()
     return initial_nodes, initial_triangles
 
 
 if __name__ == "__main__":
-    result_nodes, result_triangles = createP1Mesh()
+    result_nodes, result_triangles = editP1Mesh()
     np.set_printoptions(suppress=True)
     print("nodes =")
     print(result_nodes)

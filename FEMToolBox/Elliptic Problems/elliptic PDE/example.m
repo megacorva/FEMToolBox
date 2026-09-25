@@ -4,15 +4,14 @@
 projectRoot = fullfile(fileparts(mfilename('fullpath')), '..', '..');
 addpath(genpath(projectRoot));
 
-% generating a Delauney mesh on the unit square----------------------------
-partition=100;
-[nodes, ~, triangles] = poimesh(@squareg, partition, partition);
-triangles=triangles(1:3,:);
-mesh=P1Mesh(nodes,triangles);
+% getting the hexagon mesh-------------------------------------------------
+data = load(fullfile('FEMToolBox', 'Meshes', 'hexagon.mat'));
+mesh = P1Mesh(data.nodes, data.triangles);
+mesh=mesh.uniformRefine();
 
 % setting parameters of the PDE--------------------------------------------
 dif=[1,0;0,0.5];
-convection=[2;1];
+convection=[0.5;0];
 reaction=0;
 fExact=@(x,y)1;
 
