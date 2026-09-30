@@ -716,7 +716,7 @@ def editP1Mesh(nodes=None, triangles=None, title="P1 mesh editor"):
 
 
 if __name__ == "__main__":
-    result_nodes, result_triangles = editP1Mesh()
+    result_nodes, result_triangles = editP1Mesh([[0,1,0],[0,0,1]], [[1],[2],[3]])
     np.set_printoptions(suppress=True)
     print("nodes =")
     print(result_nodes)

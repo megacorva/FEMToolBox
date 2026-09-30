@@ -1,12 +1,13 @@
 % solves an elliptic PDE, visualize the result together with explicit
 % truncation error bounds
 
-projectRoot = fullfile(fileparts(mfilename('fullpath')), '..', '..');
+projectRoot = fullfile(fileparts(mfilename('fullpath')), '..', '..','..');
 addpath(genpath(projectRoot));
 
 % getting the hexagon mesh-------------------------------------------------
 data = load(fullfile('FEMToolBox', 'Meshes', 'hexagon.mat'));
 mesh = P1Mesh(data.nodes, data.triangles);
+mesh = editP1Mesh(mesh);
 mesh=mesh.uniformRefine();
 
 % setting parameters of the PDE--------------------------------------------
