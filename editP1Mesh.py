@@ -206,6 +206,11 @@ class P1MeshEditor:
         self.mode = "select"
         self.selected_nodes: list[int] = []
         self.selected_triangle: Optional[int] = None
+        self.selected_triangles: list[int] = []
+        self.selection_anchor = None
+        self.selection_end = None
+        self.selection_additive = False
+        self.selection_base: list[int] = []
         self.drag_node: Optional[int] = None
         self.drag_recorded = False
         self._last_left_press = None
@@ -268,6 +273,7 @@ class P1MeshEditor:
         self.fit_view()
 
     def set_mode(self, mode: str) -> None:
+        self.selection_anchor = self.selection_end = None
         self.mode = mode
         self.drag_node = None
         self.drag_recorded = False
@@ -330,6 +336,10 @@ class P1MeshEditor:
 
     def on_left_click(self, event) -> None:
         """Detect double clicks with an explicit 300 ms interval."""
+        if self.mode == "select" and event.state & 0x0004:
+            self._last_left_press = None
+            self.on_left_press(event)
+            return
         previous = self._last_left_press
         self._last_left_press = (event.time, event.x, event.y, self.mode)
         if previous is not None:
@@ -366,14 +376,34 @@ class P1MeshEditor:
                         self.status.set(str(error))
                     self.selected_nodes.clear()
         else:
-            self.selected_nodes = [node] if node is not None else []
-            self.selected_triangle = None if node is not None else self.triangle_at(event.x, event.y)
-            self.drag_node = node
+            control = bool(event.state & 0x0004)
+            self.selection_anchor = self.selection_end = None
+            self.drag_node = None
+            if control:
+                triangle = None if node is not None else self.triangle_at(event.x, event.y)
+                selection, item = (self.selected_nodes, node) if node is not None else (self.selected_triangles, triangle)
+                if item is not None:
+                    if item in selection:
+                        selection.remove(item)
+                    else:
+                        selection.append(item)
+            else:
+                self.selected_nodes = [node] if node is not None else []
+                self.selected_triangle = None if node is not None else self.triangle_at(event.x, event.y)
+                self.drag_node = node
+            if node is None:
+                self.selection_anchor = self.selection_end = (event.x, event.y)
+                self.selection_additive = control
+                self.selection_base = list(self.selected_nodes)
             self.drag_recorded = False
         self.redraw()
 
     def on_left_drag(self, event) -> None:
         self._last_left_press = None
+        if self.mode == "select" and self.selection_anchor is not None:
+            self.update_box_selection(event)
+            self.redraw()
+            return
         if self.mode in ("node", "select") and self.drag_node is not None:
             if not self.drag_recorded:
                 self.record_undo()
@@ -381,9 +411,36 @@ class P1MeshEditor:
             self.model.points[self.drag_node] = self.to_world(event.x, event.y)
             self.redraw()
 
-    def on_left_release(self, _event) -> None:
+    def update_box_selection(self, event) -> None:
+        x, y = self.selection_anchor
+        if max(abs(event.x - x), abs(event.y - y)) < 5 and self.selection_end == self.selection_anchor:
+            return
+        self.selection_end = (event.x, event.y)
+        left, right = sorted((x, event.x))
+        top, bottom = sorted((y, event.y))
+        enclosed = [i for i, point in enumerate(self.model.points)
+                    if left <= self.to_canvas(point)[0] <= right
+                    and top <= self.to_canvas(point)[1] <= bottom]
+        self.selected_nodes = list(dict.fromkeys(
+            (self.selection_base if self.selection_additive else []) + enclosed))
+        if not self.selection_additive:
+            self.selected_triangle = None
+
+    def on_left_release(self, event) -> None:
+        if self.selection_anchor is not None:
+            self.update_box_selection(event)
+            self.selection_anchor = self.selection_end = None
+            self.redraw()
         self.drag_node = None
         self.drag_recorded = False
+
+    @property
+    def selected_triangle(self) -> Optional[int]:
+        return self.selected_triangles[-1] if self.selected_triangles else None
+
+    @selected_triangle.setter
+    def selected_triangle(self, triangle: Optional[int]) -> None:
+        self.selected_triangles = [] if triangle is None else [triangle]
 
     def on_right_click(self, event) -> str:
         node = self.nearest_node(event.x, event.y)
@@ -402,6 +459,7 @@ class P1MeshEditor:
             self.selected_triangle = triangle
             menu.add_command(label="Refine into 4 triangles",
                              command=lambda: self.refine_selected_triangle(triangle))
+            menu.add_command(label="Delete", command=self.delete_selected)
         self.redraw()
         try:
             menu.tk_popup(event.x_root, event.y_root)
@@ -508,18 +566,19 @@ class P1MeshEditor:
         elif key == "f":
             self.fit_view()
         elif key == "escape":
+            self.selection_anchor = self.selection_end = None
+            self.drag_node = None
             self.selected_nodes.clear(); self.selected_triangle = None; self.redraw()
         elif key in ("return", "kp_enter"):
             self.confirm_done()
 
     def delete_selected(self) -> None:
-        if self.selected_nodes:
+        if self.selected_nodes or self.selected_triangles:
             self.record_undo()
+            for triangle in sorted(self.selected_triangles, reverse=True):
+                del self.model.triangles[triangle]
             for node in sorted(self.selected_nodes, reverse=True):
                 self.model.delete_node(node)
-        elif self.selected_triangle is not None:
-            self.record_undo()
-            del self.model.triangles[self.selected_triangle]
         self.selected_nodes.clear()
         self.selected_triangle = None
         self.redraw()
@@ -589,7 +648,7 @@ class P1MeshEditor:
         canvas.create_line(ox, 0, ox, canvas.winfo_height(), fill="#e1e4e8")
         for i, triangle in enumerate(self.model.triangles):
             coords = [value for node in triangle for value in self.to_canvas(self.model.points[node])]
-            fill = "#f9c74f" if i == self.selected_triangle else "#bde0fe"
+            fill = "#f9c74f" if i in self.selected_triangles else "#bde0fe"
             canvas.create_polygon(*coords, fill=fill, outline="#3a6ea5", width=2)
         for i, point in enumerate(self.model.points):
             x, y = self.to_canvas(point)
@@ -598,6 +657,9 @@ class P1MeshEditor:
             r = self.NODE_RADIUS + (2 if selected else 0)
             canvas.create_oval(x-r, y-r, x+r, y+r, fill=color, outline="white", width=1)
             canvas.create_text(x+9, y-9, text=str(i+1), anchor="sw", fill="#202020")
+        if self.selection_anchor is not None and self.selection_end != self.selection_anchor:
+            canvas.create_rectangle(*self.selection_anchor, *self.selection_end,
+                                    outline="#2563eb", width=2, dash=(5, 3))
 
     def open_file(self) -> None:
         from tkinter import filedialog, messagebox
