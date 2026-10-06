@@ -269,6 +269,8 @@ class P1MeshEditor:
 
     def set_mode(self, mode: str) -> None:
         self.mode = mode
+        self.drag_node = None
+        self.drag_recorded = False
         self.selected_nodes.clear()
         self.selected_triangle = None
         self.update_mode_buttons()
@@ -366,11 +368,13 @@ class P1MeshEditor:
         else:
             self.selected_nodes = [node] if node is not None else []
             self.selected_triangle = None if node is not None else self.triangle_at(event.x, event.y)
+            self.drag_node = node
+            self.drag_recorded = False
         self.redraw()
 
     def on_left_drag(self, event) -> None:
         self._last_left_press = None
-        if self.mode == "node" and self.drag_node is not None:
+        if self.mode in ("node", "select") and self.drag_node is not None:
             if not self.drag_recorded:
                 self.record_undo()
                 self.drag_recorded = True
